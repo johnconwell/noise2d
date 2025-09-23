@@ -168,6 +168,9 @@ public:
     std::pair<int, int> coordinate_highest_energy; // the coordinate of the highest value currently present in the LUT
 };
 
+namespace noise2d
+{
+
 /**
  * Method to convolve a matrix against a kernel.
  * 
@@ -191,6 +194,8 @@ std::vector<std::vector<T>> convolve(std::vector<std::vector<T>> matrix, std::ve
  */
 template <typename T>
 std::vector<std::vector<T>> gaussian_kernel(std::size_t size, double sigma);
+
+} // namespace noise2d
 
 template<typename T>
 Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_levels)
@@ -235,7 +240,7 @@ template<typename T>
 void Noise2D<T>::generate_brown_noise(double leaky_integrator, std::size_t kernel_size, double sigma)
 {
     std::vector<std::vector<double>> data_white_noise = std::vector<std::vector<double>>(height, std::vector<double>(width, 0.0));
-    std::vector<std::vector<double>> kernel = gaussian_kernel<double>(kernel_size, sigma);
+    std::vector<std::vector<double>> kernel = noise2d::gaussian_kernel<double>(kernel_size, sigma);
     std::random_device rd;
     std::mt19937 mt(rd());
     std::uniform_real_distribution<> dis(0, 1);
@@ -252,7 +257,7 @@ void Noise2D<T>::generate_brown_noise(double leaky_integrator, std::size_t kerne
     }
 
     // convolve the white noise matrix
-    std::vector<std::vector<double>> data_temporary = convolve<double, double>(data_white_noise, kernel, leaky_integrator);
+    std::vector<std::vector<double>> data_temporary = noise2d::convolve<double, double>(data_white_noise, kernel, leaky_integrator);
     
     for(std::size_t y = 0; y < height; y++)
     {
@@ -647,7 +652,7 @@ void Noise2D<T>::EnergyLUT::update(std::vector<std::vector<int>> binary_pattern,
 }
 
 template <typename T, typename K>
-std::vector<std::vector<T>> convolve(std::vector<std::vector<T>> matrix, std::vector<std::vector<K>> kernel, double leaky_integrator)
+std::vector<std::vector<T>> noise2d::convolve(std::vector<std::vector<T>> matrix, std::vector<std::vector<K>> kernel, double leaky_integrator)
 {
     const std::size_t matrix_height = matrix.size();
     const std::size_t matrix_width = matrix[0].size();
@@ -682,7 +687,7 @@ std::vector<std::vector<T>> convolve(std::vector<std::vector<T>> matrix, std::ve
 }
 
 template <typename T>
-std::vector<std::vector<T>> gaussian_kernel(std::size_t size, double sigma)
+std::vector<std::vector<T>> noise2d::gaussian_kernel(std::size_t size, double sigma)
 {
     std::vector<std::vector<T>> kernel = std::vector<std::vector<T>>(size, std::vector<T>(size, static_cast<T>(0)));
 
