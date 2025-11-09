@@ -111,8 +111,8 @@ private:
     void generate_blue_noise_rank_data_phase_3(double sigma); // fill in noise matrix with ranks from one more than half the number of cells in the matrix to the number of cells in the matrix
     void normalize_blue_noise_rank_data(); // normalize every value in the matrix to be between [0, output_levels) if data type is integral or [0, 1] if data type is floating-point
 
-    void binary_pattern_copy(std::vector<std::vector<int>> &binary_pattern_source, std::vector<std::vector<int>> &binary_pattern_destination); // copy the values from one binary pattern into another
-    void binary_pattern_invert(std::vector<std::vector<int>> &binary_pattern); // change all zeros to ones and vice versa in a binary pattern
+    void binary_pattern_copy(std::vector<std::vector<int>>& binary_pattern_source, std::vector<std::vector<int>>& binary_pattern_destination); // copy the values from one binary pattern into another
+    void binary_pattern_invert(std::vector<std::vector<int>>& binary_pattern); // change all zeros to ones and vice versa in a binary pattern
 
     std::vector<std::vector<int>> blue_noise_rank_data; // temporary matrix storing blue noise rank data pre-normalization
     std::vector<std::vector<int>> binary_pattern_initial; // initial state of the blue noise binary pattern (array of zeros and ones, with the ones as evenly spaced as possible)
@@ -147,7 +147,7 @@ public:
      * @param binary_pattern The binary pattern (matrix of zeros and ones) used to calculate the energy values.
      * @param sigma The standard deviation of the Gaussian function used to calculate the energy at each cell.
      */
-    void create(std::vector<std::vector<int>> binary_pattern, double sigma);
+    void create(const std::vector<std::vector<int>>& binary_pattern, double sigma);
 
     /**
      * Method that updates the LUT when a cell is changed.
@@ -157,7 +157,7 @@ public:
      * @param y The y coordinate of the cell that has changed from a zero to a one or vice versa.
      * @param sigma The standard deviation of the Gaussian function used to calculate the energy at each cell.
      */
-    void update(std::vector<std::vector<int>> binary_pattern, std::size_t x, std::size_t y, double sigma);
+    void update(const std::vector<std::vector<int>>& binary_pattern, std::size_t x, std::size_t y, double sigma);
 
     std::vector<std::vector<double>> LUT; // the LUT that stores the Gaussian energy of each cell
     std::size_t height; // the height of the LUT
@@ -180,7 +180,7 @@ namespace noise2d
  * @note Type T may be an integral or floating-point type, type K must be floating-point type.
  */
 template <typename T, typename K>
-std::vector<std::vector<T>> convolve(std::vector<std::vector<T>> matrix, std::vector<std::vector<K>> kernel, double leaky_integrator);
+std::vector<std::vector<T>> convolve(const std::vector<std::vector<T>>& matrix, const std::vector<std::vector<K>>& kernel, double leaky_integrator);
 
 /**
  * Method to generate a Gaussian kernel.
@@ -340,7 +340,7 @@ void Noise2D<T>::generate_blue_noise_initial_binary_pattern(double sigma)
     for(int index_remaining_coordinates = num_pixels - 1; index_remaining_coordinates >= 0; index_remaining_coordinates--)
     {
         std::uniform_int_distribution<> dis(0, index_remaining_coordinates);
-        int index_random = dis(mt);
+        const int index_random = dis(mt);
         std::pair<int, int> temp = remaining_coordinates[index_remaining_coordinates];
         remaining_coordinates[index_remaining_coordinates] = remaining_coordinates[index_random];
         remaining_coordinates[index_random] = temp;
@@ -469,7 +469,7 @@ void Noise2D<T>::normalize_blue_noise_rank_data()
 }
 
 template<typename T>
-void Noise2D<T>::binary_pattern_copy(std::vector<std::vector<int>> &binary_pattern_source, std::vector<std::vector<int>> &binary_pattern_destination)
+void Noise2D<T>::binary_pattern_copy(std::vector<std::vector<int>>& binary_pattern_source, std::vector<std::vector<int>>& binary_pattern_destination)
 {
     for(std::size_t y = 0; y < height; y++)
     {
@@ -483,7 +483,7 @@ void Noise2D<T>::binary_pattern_copy(std::vector<std::vector<int>> &binary_patte
 }
 
 template<typename T>
-void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>> &binary_pattern)
+void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>>& binary_pattern)
 {
     for(std::size_t y = 0; y < height; y++)
     {
@@ -523,7 +523,7 @@ Noise2D<T>::EnergyLUT::EnergyLUT(std::size_t width, std::size_t height)
 }
 
 template<typename T>
-void Noise2D<T>::EnergyLUT::create(std::vector<std::vector<int>> binary_pattern, double sigma)
+void Noise2D<T>::EnergyLUT::create(const std::vector<std::vector<int>>& binary_pattern, double sigma)
 {
     const double half_width = static_cast<double>(width) / 2.0;
     const double half_height = static_cast<double>(height) / 2.0;
@@ -588,7 +588,7 @@ void Noise2D<T>::EnergyLUT::create(std::vector<std::vector<int>> binary_pattern,
 }
 
 template<typename T>
-void Noise2D<T>::EnergyLUT::update(std::vector<std::vector<int>> binary_pattern, std::size_t x, std::size_t y, double sigma)
+void Noise2D<T>::EnergyLUT::update(const std::vector<std::vector<int>>& binary_pattern, std::size_t x, std::size_t y, double sigma)
 {
     const double half_width = static_cast<double>(width) / 2.0;
     const double half_height = static_cast<double>(height) / 2.0;
@@ -652,7 +652,7 @@ void Noise2D<T>::EnergyLUT::update(std::vector<std::vector<int>> binary_pattern,
 }
 
 template <typename T, typename K>
-std::vector<std::vector<T>> noise2d::convolve(std::vector<std::vector<T>> matrix, std::vector<std::vector<K>> kernel, double leaky_integrator)
+std::vector<std::vector<T>> noise2d::convolve(const std::vector<std::vector<T>>& matrix, const std::vector<std::vector<K>>& kernel, double leaky_integrator)
 {
     const std::size_t matrix_height = matrix.size();
     const std::size_t matrix_width = matrix[0].size();
