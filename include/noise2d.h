@@ -93,10 +93,22 @@ public:
      */
     void generate_white_noise();
 
+    /**
+     * Method to generate Perlin Noise.
+     * 
+     * 
+     */
+    void generate_perlin_noise();
+
 private:
     class EnergyLUT; // EnergyLUT class declaration
     static inline const std::size_t OUTPUT_LEVELS_MIN = 2; // default value of output_levels, 2 output levels corresponds to a 1 bit image
     static inline const double COVERAGE = 0.1; // default value of coverage
+    static inline const std::vector<std::vector<int>> GRADIENT_VECTORS = {
+        {1, 1, 0}, {-1, 1, 0}, {1, -1, 0}, {-1, -1, 0}, 
+        {1, 0, 1}, {-1, 0, 1}, {1, 0, -1}, {-1, 0, -1}, 
+        {0, 1, 1}, {0, -1, 1}, {0, 1, -1}, {0, -1, -1}
+    };
 
     std::vector<std::vector<T>> data; // matrix the output of noise generation
     std::size_t width; // width of the noise matrix
