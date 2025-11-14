@@ -98,7 +98,7 @@ public:
      * 
      * 
      */
-    void generate_perlin_noise();
+    void generate_perlin_noise(unsigned int seed = std::random_device(), double frequency);
 
 private:
     class EnergyLUT; // EnergyLUT class declaration
@@ -131,6 +131,9 @@ private:
     std::vector<std::vector<int>> binary_pattern_prototype; // prototype binary pattern used in the blue noise generation algorithm
     EnergyLUT energy_lut; // LUT that maintains the energy values of each cell to speed up blue noise generation
     double coverage; // arbitrary value that determines the starting state of blue noise
+
+    // perlin noise specific members
+    std::pair<double, double> random_gradient_vector(std::size_t x, std::size_t y); // returns a randomly generated unit vector seeded with x, y for repeatable results
 };
 
 /**
@@ -206,6 +209,76 @@ std::vector<std::vector<T>> convolve(const std::vector<std::vector<T>>& matrix, 
  */
 template <typename T>
 std::vector<std::vector<T>> gaussian_kernel(std::size_t size, double sigma);
+
+/**
+ * Method to compute the dot product between two vectors.
+ * 
+ * @param x0 The x component of the first vector.
+ * @param y0 The y component of the first vector.
+ * @param x1 The x component of the second vector.
+ * @param y1 The y component of the second vector.
+ * @returns The dot product of the two vectors.
+ */
+template <typename T>
+double dot_product(T x0, T y0, T x1, T y1);
+
+/**
+ * Method to clamp a value between a minimum value and a maximum value.
+ * 
+ * @param value The value to clamp.
+ * @param min The minimum value.
+ * @param max The maximum value.
+ * @returns If value <= min, returns min.
+ * If value >= max, returns max.
+ * If value > min and value < max, returns value.
+ */
+template <typename T>
+T clamp(T value, T min, T max);
+
+/**
+ * Method to perform linear (1st order) interpolation between two values.
+ * 
+ * @param v0 The first value.
+ * @param v1 The second value.
+ * @param t The weight of interpolation between v0 and v1.
+ * t must be in the range [0, 1].
+ * @returns If t <= 0, returns v0.
+ * If t >= 1, return v1.
+ * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
+ * @note Type T may be an integral or floating-point type, type K must be floating-point type.
+ */
+template <typename T, typename K>
+T interpolate_linear(T v0, T v1, K t);
+
+/**
+ * Method to perform linear (1st order) interpolation between two values.
+ * 
+ * @param v0 The first value.
+ * @param v1 The second value.
+ * @param t The weight of interpolation between v0 and v1.
+ * t must be in the range [0, 1].
+ * @returns If t <= 0, returns v0.
+ * If t >= 1, return v1.
+ * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
+ * @note Type T may be an integral or floating-point type, type K must be floating-point type.
+ */
+template <typename T, typename K>
+T interpolate_cubic(T v0, T v1, double t);
+
+/**
+ * Method to perform linear (1st order) interpolation between two values.
+ * 
+ * @param v0 The first value.
+ * @param v1 The second value.
+ * @param t The weight of interpolation between v0 and v1.
+ * t must be in the range [0, 1].
+ * @returns If t <= 0, returns v0.
+ * If t >= 1, return v1.
+ * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
+ * @note Type T may be an integral or floating-point type, type K must be floating-point type.
+ */
+template <typename T, typename K>
+T interpolate_quintic(T v0, T v1, double t);
 
 } // namespace noise2d
 
@@ -321,6 +394,23 @@ void Noise2D<T>::generate_white_noise()
                 std::uniform_real_distribution<> dis(0, 1);
                 data[y][x] = dis(mt);
             }
+        }
+    }
+
+    return;
+}
+
+template<typename T>
+void Noise2D<T>::generate_perlin_noise(unsigned int seed, double frequency)
+{
+    std::mt19937 mt(seed);
+
+    for(std::size_t y = 0; y < height; y++)
+    {
+        for(std::size_t x = 0; x < width; x++)
+        {
+            double x;
+            data[y][x] = 0;
         }
     }
 
@@ -506,6 +596,17 @@ void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>>& binary_pat
     }
 
     return;
+}
+
+template <typename T>
+std::pair<double, double> Noise2D<T>::random_gradient_vector(std::size_t x, std::size_t y)
+{
+    std::pair<int, int> vector = std::pair<int, int>(0, 0);
+    std::seed_seq seed{x, y};
+    std::mt19937 mt(seed);
+    std::uniform_real_distribution dist;
+    
+    return vector;
 }
 
 template<typename T>
@@ -726,6 +827,50 @@ std::vector<std::vector<T>> noise2d::gaussian_kernel(std::size_t size, double si
     }
 
     return kernel;
+}
+
+template <typename T>
+double noise2d::dot_product(T x0, T y0, T x1, T y1)
+{
+    return static_cast<double>(x0 * x1 + y0 * y1);
+}
+
+template <typename T>
+T noise2d::clamp(T value, T min, T max)
+{
+    T clamped_value = value;
+
+    if(value < min)
+    {
+        clamped_value = min;
+    }
+    else if(value > max)
+    {
+        clamped_value = max;
+    }
+
+    return clamped_value;
+}
+
+template <typename T, typename K>
+T noise2d::interpolate_linear(T v0, T v1, K t)
+{
+    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<K>(v0) + t_clamped * static_cast<K>(v1 - v0));
+}
+
+template <typename T, typename K>
+T noise2d::interpolate_cubic(T v0, T v1, K t)
+{
+    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<K>(v0) + (t_clamped * t_clamped * (3.0 - t_clamped * 2.0)) * static_cast<K>(v1 - v0));
+}
+
+template <typename T, typename K>
+T noise2d::interpolate_quintic(T v0, T v1, K t)
+{
+    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<K>(v0) + (t_clamped * t_clamped * t_clamped * (t_clamped * (t_clamped * 6.0 - 15.0) + 10.0)) * static_cast<K>(v1 - v0));
 }
 
 #endif

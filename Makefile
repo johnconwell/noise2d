@@ -31,12 +31,16 @@ main : $(OBJ)
 blue_noise: ./examples/example_blue_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
 	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
-# rule to make example_blue_noise.cpp and build the result as blue_noise.exe
+# rule to make example_brown_noise.cpp and build the result as brown_noise.exe
 brown_noise: ./examples/example_brown_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
 	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
-# rule to make example_blue_noise.cpp and build the result as blue_noise.exe
+# rule to make example_white_noise.cpp and build the result as white_noise.exe
 white_noise: ./examples/example_white_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
+	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+
+# rule to make example_perlin_noise.cpp and build the result as perlin_noise.exe
+perlin_noise: ./examples/example_perlin_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
 	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
 .PHONY : clean
