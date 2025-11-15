@@ -30,7 +30,7 @@
 #include <iostream> // std::cout, std::endl
 
 std::vector<std::vector<int>> create_matrix_from_noise(Noise2D<int> noise, std::size_t width, std::size_t height);
-std::string generate_perlin_noise(int width, int height, int output_levels, bool fourier, bool benchmark);
+std::string generate_perlin_noise(int width, int height, int output_levels, std::size_t seed, double frequency, bool fourier, bool benchmark);
 
 int main()
 {
@@ -46,26 +46,27 @@ int main()
     }
 
     std::size_t output_levels = 256;
-    double sigma = 1.9;
+    std::size_t seed = 1;
+    double frequency = 0.2;
     bool fourier = true;
     bool benchmark = true;
 
-    std::cout << generate_perlin_noise(2, 2, output_levels, fourier, benchmark) << std::endl;
-    std::cout << generate_perlin_noise(4, 4, output_levels, fourier, benchmark) << std::endl;
-    std::cout << generate_perlin_noise(8, 8, output_levels, fourier, benchmark) << std::endl;
-    std::cout << generate_perlin_noise(16, 16, output_levels, fourier, benchmark) << std::endl;
-    std::cout << generate_perlin_noise(32, 32, output_levels, fourier, benchmark) << std::endl;
-    std::cout << generate_perlin_noise(64, 64, output_levels, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(2, 2, output_levels, seed, frequency, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(4, 4, output_levels, seed, frequency, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(8, 8, output_levels, seed, frequency, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(16, 16, output_levels, seed, frequency, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(32, 32, output_levels, seed, frequency, fourier, benchmark) << std::endl;
+    std::cout << generate_perlin_noise(64, 64, output_levels, seed, frequency, fourier, benchmark) << std::endl;
 
     return 0;
 }
 
-std::string generate_perlin_noise(int width, int height, int output_levels, bool fourier, bool benchmark)
+std::string generate_perlin_noise(int width, int height, int output_levels, std::size_t seed, double frequency, bool fourier, bool benchmark)
 {
     std::string output = "";
     std::chrono::time_point<std::chrono::steady_clock> time_start;
     std::chrono::time_point<std::chrono::steady_clock> time_end;
-    Noise2D<int> blue_noise = Noise2D<int>(width, height, output_levels);
+    Noise2D<int> perlin_noise = Noise2D<int>(width, height, output_levels);
     Image image = Image();
     char file_name[1000];
     sprintf(file_name, "output\\perlin_noise_%ix%i.png", width, height);
@@ -78,7 +79,7 @@ std::string generate_perlin_noise(int width, int height, int output_levels, bool
         time_start = std::chrono::steady_clock::now();
     }
 
-    blue_noise.generate_perlin_noise();
+    perlin_noise.generate_perlin_noise(seed, frequency);
 
     if(benchmark)
     {
@@ -86,7 +87,7 @@ std::string generate_perlin_noise(int width, int height, int output_levels, bool
         output += std::to_string(std::chrono::nanoseconds(time_end - time_start).count() / 1000) + " us\n";
     }
 
-    std::vector<std::vector<int>> matrix = create_matrix_from_noise(blue_noise, width, height);
+    std::vector<std::vector<int>> matrix = create_matrix_from_noise(perlin_noise, width, height);
     image.create_from_matrix(matrix);
     image.save(file_name);
 

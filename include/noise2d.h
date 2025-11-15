@@ -31,8 +31,6 @@
 #include <type_traits> // std::is_floating_point
 #include <vector> // std::vector
 
-const char* NOISE2D_VERSION_STRING = "1.0.0";
-
 /**
  * A class containing 2D noise data and methods to generate noise.
  */
@@ -96,14 +94,17 @@ public:
     /**
      * Method to generate Perlin Noise.
      * 
-     * 
+     * @param seed The seed for the psuedo-random number generator, specified to allow repeatable results.
+     * @param frequency The frequency of noise in the range (0, 1).
+     * @throw std::out_of_range if frequency is outside the range (0, 1).
      */
-    void generate_perlin_noise(unsigned int seed = std::random_device(), double frequency);
+    void generate_perlin_noise(std::size_t seed, double frequency);
 
 private:
     class EnergyLUT; // EnergyLUT class declaration
     static inline const std::size_t OUTPUT_LEVELS_MIN = 2; // default value of output_levels, 2 output levels corresponds to a 1 bit image
     static inline const double COVERAGE = 0.1; // default value of coverage
+    // static inline const double PI = std::acos(-1.0);
     static inline const std::vector<std::vector<int>> GRADIENT_VECTORS = {
         {1, 1, 0}, {-1, 1, 0}, {1, -1, 0}, {-1, -1, 0}, 
         {1, 0, 1}, {-1, 0, 1}, {1, 0, -1}, {-1, 0, -1}, 
@@ -131,9 +132,6 @@ private:
     std::vector<std::vector<int>> binary_pattern_prototype; // prototype binary pattern used in the blue noise generation algorithm
     EnergyLUT energy_lut; // LUT that maintains the energy values of each cell to speed up blue noise generation
     double coverage; // arbitrary value that determines the starting state of blue noise
-
-    // perlin noise specific members
-    std::pair<double, double> random_gradient_vector(std::size_t x, std::size_t y); // returns a randomly generated unit vector seeded with x, y for repeatable results
 };
 
 /**
@@ -146,7 +144,7 @@ public:
     /**
      * Do not use default constructor; width and height must be specified.
      */
-    EnergyLUT();
+    EnergyLUT() = delete;
 
     /**
      * Constructor for EnergyLUT objects.
@@ -186,12 +184,14 @@ public:
 namespace noise2d
 {
 
+const double PI = acos(-1.0);
+
 /**
  * Method to convolve a matrix against a kernel.
  * 
  * @param matrix The 2d matrix to convolve.
  * @param kernel The kernel used to perform the convolution.
- * @returns The convolved matrix.
+ * @return The convolved matrix.
  * @note Type T may be an integral or floating-point type, type K must be floating-point type.
  */
 template <typename T, typename K>
@@ -204,7 +204,7 @@ std::vector<std::vector<T>> convolve(const std::vector<std::vector<T>>& matrix, 
  * A size of 3 corresponds to a 3x3 kernel.
  * @param sigma The standard deviation of the Gaussian kernel.
  * A larger value of sigma gives more weight to cells further from the center cell and vice versa.
- * @returns The generated kernel.
+ * @return The generated kernel.
  * @note Type T must be a floating-point type.
  */
 template <typename T>
@@ -213,14 +213,12 @@ std::vector<std::vector<T>> gaussian_kernel(std::size_t size, double sigma);
 /**
  * Method to compute the dot product between two vectors.
  * 
- * @param x0 The x component of the first vector.
- * @param y0 The y component of the first vector.
- * @param x1 The x component of the second vector.
- * @param y1 The y component of the second vector.
- * @returns The dot product of the two vectors.
+ * @param v0 The first vector.
+ * @param v1 The second vector.
+ * @return The dot product of the two vectors.
  */
 template <typename T>
-double dot_product(T x0, T y0, T x1, T y1);
+double dot_product(const std::pair<T, T>& v0, const std::pair<T, T>& v1);
 
 /**
  * Method to clamp a value between a minimum value and a maximum value.
@@ -228,7 +226,7 @@ double dot_product(T x0, T y0, T x1, T y1);
  * @param value The value to clamp.
  * @param min The minimum value.
  * @param max The maximum value.
- * @returns If value <= min, returns min.
+ * @return If value <= min, returns min.
  * If value >= max, returns max.
  * If value > min and value < max, returns value.
  */
@@ -242,48 +240,69 @@ T clamp(T value, T min, T max);
  * @param v1 The second value.
  * @param t The weight of interpolation between v0 and v1.
  * t must be in the range [0, 1].
- * @returns If t <= 0, returns v0.
+ * @return If t <= 0, returns v0.
  * If t >= 1, return v1.
  * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
  * @note Type T may be an integral or floating-point type, type K must be floating-point type.
  */
-template <typename T, typename K>
-T interpolate_linear(T v0, T v1, K t);
+template <typename T>
+T interpolate_linear(T v0, T v1, double t);
 
 /**
- * Method to perform linear (1st order) interpolation between two values.
+ * Method to perform cubic (3rd order) interpolation between two values.
  * 
  * @param v0 The first value.
  * @param v1 The second value.
  * @param t The weight of interpolation between v0 and v1.
  * t must be in the range [0, 1].
- * @returns If t <= 0, returns v0.
+ * @return If t <= 0, returns v0.
  * If t >= 1, return v1.
  * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
  * @note Type T may be an integral or floating-point type, type K must be floating-point type.
  */
-template <typename T, typename K>
+template <typename T>
 T interpolate_cubic(T v0, T v1, double t);
 
 /**
- * Method to perform linear (1st order) interpolation between two values.
+ * Method to perform quintic (5th order) interpolation between two values.
  * 
  * @param v0 The first value.
  * @param v1 The second value.
  * @param t The weight of interpolation between v0 and v1.
  * t must be in the range [0, 1].
- * @returns If t <= 0, returns v0.
+ * @return If t <= 0, returns v0.
  * If t >= 1, return v1.
  * If t > 0 and t < 1, returns an interpolated value between v0 and v1.
  * @note Type T may be an integral or floating-point type, type K must be floating-point type.
  */
-template <typename T, typename K>
+template <typename T>
 T interpolate_quintic(T v0, T v1, double t);
+
+/**
+ * Method to determine the vector between two points.
+ * 
+ * @param x0 The x coordinate of the first point.
+ * @param y0 The y coordinate of the first point.
+ * @param x1 The x coordinate of the second point.
+ * @param y1 The y coordinate of the second point.
+ * @return A vector pointing from (x0, y0) to (x1, y1)
+ */
+std::pair<double, double> distance_vector(double x0, double y0, double x1, double y1);
+
+/**
+ * Method to generate a unit vector pointing in a random 2d direction.
+ * 
+ * @param seed The seed for the psuedo-random number generator.
+ * @param x An x coordinate that also seeds the psuedo-random number generator for repeatable results on the same coordinate.
+ * @param y A y coordinate that also seeds the psuedo-random number generator for repeatable results on the same coordinate.
+ * @return A unit vector pointing in a random 2d direction.
+ */
+std::pair<double, double> random_gradient_vector(std::size_t seed, std::size_t x, std::size_t y);
 
 } // namespace noise2d
 
 template<typename T>
-Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_levels)
+Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_levels) : energy_lut(width, height)
 {
     this->data = std::vector<std::vector<T>>(height, std::vector<T>(width, static_cast<T>(0)));
     this->width = width;
@@ -294,7 +313,6 @@ Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_le
     this->blue_noise_rank_data = std::vector<std::vector<int>>(height, std::vector<int>(width, 0));
     this->binary_pattern_initial = std::vector<std::vector<int>>(height, std::vector<int>(width, 0));
     this->binary_pattern_prototype = std::vector<std::vector<int>>(height, std::vector<int>(width, 0));
-    this->energy_lut = EnergyLUT(width, height);
 
     return;
 }
@@ -343,7 +361,7 @@ void Noise2D<T>::generate_brown_noise(double leaky_integrator, std::size_t kerne
 
     // convolve the white noise matrix
     std::vector<std::vector<double>> data_temporary = noise2d::convolve<double, double>(data_white_noise, kernel, leaky_integrator);
-    
+     
     for(std::size_t y = 0; y < height; y++)
     {
         for(std::size_t x = 0; x < width; x++)
@@ -401,16 +419,66 @@ void Noise2D<T>::generate_white_noise()
 }
 
 template<typename T>
-void Noise2D<T>::generate_perlin_noise(unsigned int seed, double frequency)
+void Noise2D<T>::generate_perlin_noise(std::size_t seed, double frequency)
 {
-    std::mt19937 mt(seed);
+    if(frequency <= 0 || frequency >= 1)
+    {
+        throw std::out_of_range("generate_perlin_noise invalid frequency, must be in range (0, 1)");
+    }
 
     for(std::size_t y = 0; y < height; y++)
     {
         for(std::size_t x = 0; x < width; x++)
         {
-            double x;
-            data[y][x] = 0;
+            // convert each pixel coordinate to a floating point sample coordinate scaled to the desired frequency
+            const double yf = static_cast<double>(y) * frequency;
+            const double xf = static_cast<double>(x) * frequency;
+            
+            // find the four surrounding grid intersection coordinates
+            const double x0 = static_cast<double>(static_cast<int>(xf));
+            const double y0 = static_cast<double>(static_cast<int>(yf));
+            const double x1 = x0 + 1.0;
+            const double y1 = y0 + 1.0;
+
+            // determine the x and y offset of the sample coordinate from the top left corner
+            const double dx = xf - x0;
+            const double dy = yf - y0;
+
+            // generate a random gradient vector at each surrounding grid intersection
+            const std::pair<double, double> graident_vector_00 = noise2d::random_gradient_vector(seed, x0, y0);
+            const std::pair<double, double> graident_vector_01 = noise2d::random_gradient_vector(seed, x0, y1);
+            const std::pair<double, double> graident_vector_10 = noise2d::random_gradient_vector(seed, x1, y0);
+            const std::pair<double, double> graident_vector_11 = noise2d::random_gradient_vector(seed, x1, y1);
+
+            // calculate the distance vector from the sampling coordinate to the surrounding grid intersection coordinates
+            const std::pair<double, double> distance_vector_00 = noise2d::distance_vector(x0, y0, xf, yf);
+            const std::pair<double, double> distance_vector_01 = noise2d::distance_vector(x0, y1, xf, yf);
+            const std::pair<double, double> distance_vector_10 = noise2d::distance_vector(x1, y0, xf, yf);
+            const std::pair<double, double> distance_vector_11 = noise2d::distance_vector(x1, y1, xf, yf);
+
+            // calculate the dot product between the sample coordinate and each surrounding grid intersection coordinate
+            const double dot_product_00 = noise2d::dot_product(graident_vector_00, distance_vector_00);
+            const double dot_product_01 = noise2d::dot_product(graident_vector_01, distance_vector_01);
+            const double dot_product_10 = noise2d::dot_product(graident_vector_10, distance_vector_10);
+            const double dot_product_11 = noise2d::dot_product(graident_vector_11, distance_vector_11);
+
+            // interpolate between the horizontal components
+            const double interpolation_top = noise2d::interpolate_quintic(dot_product_00, dot_product_10, dx);
+            const double interpolation_bottom = noise2d::interpolate_quintic(dot_product_01, dot_product_11, dx);
+
+            // interpolate between the interpolated components
+            const double interpolation_total = noise2d::interpolate_quintic(interpolation_top, interpolation_bottom, dy);
+
+            if constexpr(std::is_integral<T>::value)
+            {
+                // normalize to [0, output_levels) range
+                data[y][x] = static_cast<T>((interpolation_total + 1.0) * static_cast<double>(output_levels) / 2.0);
+            }
+            else
+            {
+                // normalize to [0, 1] range
+                data[y][x] = static_cast<T>((interpolation_total + 1.0) / 2.0);
+            }
         }
     }
 
@@ -595,30 +663,6 @@ void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>>& binary_pat
         }
     }
 
-    return;
-}
-
-template <typename T>
-std::pair<double, double> Noise2D<T>::random_gradient_vector(std::size_t x, std::size_t y)
-{
-    std::pair<int, int> vector = std::pair<int, int>(0, 0);
-    std::seed_seq seed{x, y};
-    std::mt19937 mt(seed);
-    std::uniform_real_distribution dist;
-    
-    return vector;
-}
-
-template<typename T>
-Noise2D<T>::EnergyLUT::EnergyLUT()
-{
-    height = 0;
-    width = 0;
-    LUT = std::vector<std::vector<double>>(height, std::vector<double>(width, 0.0));
-    value_lowest_energy = DBL_MAX;
-    value_highest_energy = 0.0;
-    coordinate_lowest_energy = std::pair<int, int>(-1, -1);
-    coordinate_highest_energy = std::pair<int, int>(-1, -1);
     return;
 }
 
@@ -830,9 +874,9 @@ std::vector<std::vector<T>> noise2d::gaussian_kernel(std::size_t size, double si
 }
 
 template <typename T>
-double noise2d::dot_product(T x0, T y0, T x1, T y1)
+double noise2d::dot_product(const std::pair<T, T>& v0, const std::pair<T, T>& v1)
 {
-    return static_cast<double>(x0 * x1 + y0 * y1);
+    return static_cast<double>(v0.first * v1.first + v0.second * v1.second);
 }
 
 template <typename T>
@@ -852,25 +896,42 @@ T noise2d::clamp(T value, T min, T max)
     return clamped_value;
 }
 
-template <typename T, typename K>
-T noise2d::interpolate_linear(T v0, T v1, K t)
+template <typename T>
+T noise2d::interpolate_linear(T v0, T v1, double t)
 {
-    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
-    return static_cast<T>(static_cast<K>(v0) + t_clamped * static_cast<K>(v1 - v0));
+    const double t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<double>(v0) + t_clamped * static_cast<double>(v1 - v0));
 }
 
-template <typename T, typename K>
-T noise2d::interpolate_cubic(T v0, T v1, K t)
+template <typename T>
+T noise2d::interpolate_cubic(T v0, T v1, double t)
 {
-    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
-    return static_cast<T>(static_cast<K>(v0) + (t_clamped * t_clamped * (3.0 - t_clamped * 2.0)) * static_cast<K>(v1 - v0));
+    const double t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<double>(v0) + (t_clamped * t_clamped * (3.0 - t_clamped * 2.0)) * static_cast<double>(v1 - v0));
 }
 
-template <typename T, typename K>
-T noise2d::interpolate_quintic(T v0, T v1, K t)
+template <typename T>
+T noise2d::interpolate_quintic(T v0, T v1, double t)
 {
-    K t_clamped = noise2d::clamp(t, 0.0, 1.0);
-    return static_cast<T>(static_cast<K>(v0) + (t_clamped * t_clamped * t_clamped * (t_clamped * (t_clamped * 6.0 - 15.0) + 10.0)) * static_cast<K>(v1 - v0));
+    const double t_clamped = noise2d::clamp(t, 0.0, 1.0);
+    return static_cast<T>(static_cast<double>(v0) + (t_clamped * t_clamped * t_clamped * (t_clamped * (t_clamped * 6.0 - 15.0) + 10.0)) * static_cast<double>(v1 - v0));
+}
+
+std::pair<double, double> noise2d::distance_vector(double x0, double y0, double x1, double y1)
+{
+    return std::pair<double, double>(x1 - x0, y1 - y0);
+}
+
+std::pair<double, double> noise2d::random_gradient_vector(std::size_t seed, std::size_t x, std::size_t y)
+{
+    std::pair<double, double> vector = std::pair<double, double>(0.0, 0.0);
+    std::seed_seq sseq{seed, x, y}; // seed the random number generator based on the x and y coordinates and a constant seed so that the outcome is repeatable
+    std::mt19937 mt(sseq);
+    std::uniform_real_distribution<> dist(0.0, 2.0 * PI);
+    const double random = dist(mt);
+    vector.first = sin(random);
+    vector.second = cos(random);
+    return vector;
 }
 
 #endif
