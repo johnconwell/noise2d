@@ -1,5 +1,4 @@
 .vscode/
 output/**
-obj/
 *.exe
 *.o
