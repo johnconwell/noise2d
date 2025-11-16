@@ -34,7 +34,7 @@
 /**
  * A class containing 2D noise data and methods to generate noise.
  */
-template<typename T>
+template <typename T>
 class Noise2D final
 {
 public:
@@ -52,7 +52,7 @@ public:
      * If noise is a floating-point type, this value is ignored.
      * If noise is an integral type, then the values in the generated noise matrix range from [0, output_levels)
      */
-    Noise2D(std::size_t width, std::size_t height, std::size_t output_levels = 2);
+    Noise2D(std::size_t width, std::size_t height, std::size_t output_levels = 256);
 
     /**
      * Method to get the noise from the noise matrix at an (x, y) coordinate.
@@ -95,21 +95,25 @@ public:
      * Method to generate Perlin Noise.
      * 
      * @param seed The seed for the psuedo-random number generator, specified to allow repeatable results.
-     * @param frequency The frequency of noise in the range (0, 1).
-     * @throw std::out_of_range if frequency is outside the range (0, 1).
+     * @param frequency The frequency of noise. Must be greater than 0. Values greater than 1 increasingly resemble white noise.
+     * @throw std::out_of_range if frequency is less than 0.0.
      */
     void generate_perlin_noise(std::size_t seed, double frequency);
+
+    /**
+     * Method to generate Fractal Noise ("stacked Perlin noise").
+     * 
+     * @param starting_frequency The beginning frequency for the Perlin noise, which will contribute the bulk of the noise value at each pixel.
+     * @param octaves The number of octaves in the noise. Each octave contributes more noise at twice the frequency and half the amplitude.
+     * @throw std::out_of_range if starting frequency is less than 0.0.
+     * @throw std::out_of_range if octaves is less than 1.
+     */
+    void generate_fractal_noise(double starting_frequency, std::size_t octaves);
 
 private:
     class EnergyLUT; // EnergyLUT class declaration
     static inline const std::size_t OUTPUT_LEVELS_MIN = 2; // default value of output_levels, 2 output levels corresponds to a 1 bit image
     static inline const double COVERAGE = 0.1; // default value of coverage
-    // static inline const double PI = std::acos(-1.0);
-    static inline const std::vector<std::vector<int>> GRADIENT_VECTORS = {
-        {1, 1, 0}, {-1, 1, 0}, {1, -1, 0}, {-1, -1, 0}, 
-        {1, 0, 1}, {-1, 0, 1}, {1, 0, -1}, {-1, 0, -1}, 
-        {0, 1, 1}, {0, -1, 1}, {0, 1, -1}, {0, -1, -1}
-    };
 
     std::vector<std::vector<T>> data; // matrix the output of noise generation
     std::size_t width; // width of the noise matrix
@@ -132,12 +136,15 @@ private:
     std::vector<std::vector<int>> binary_pattern_prototype; // prototype binary pattern used in the blue noise generation algorithm
     EnergyLUT energy_lut; // LUT that maintains the energy values of each cell to speed up blue noise generation
     double coverage; // arbitrary value that determines the starting state of blue noise
+
+    // perlin noise specific members
+    double sample_perlin_point(std::size_t seed, double x, double y);
 };
 
 /**
  * A class containing an LUT that stores the Gaussian "energy" of each cell in the noise matrix during blue noise generation.
  */
-template<typename T>
+template <typename T>
 class Noise2D<T>::EnergyLUT
 {
 public:
@@ -301,7 +308,7 @@ std::pair<double, double> random_gradient_vector(std::size_t seed, std::size_t x
 
 } // namespace noise2d
 
-template<typename T>
+template <typename T>
 Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_levels) : energy_lut(width, height)
 {
     this->data = std::vector<std::vector<T>>(height, std::vector<T>(width, static_cast<T>(0)));
@@ -317,7 +324,7 @@ Noise2D<T>::Noise2D(std::size_t width, std::size_t height, std::size_t output_le
     return;
 }
 
-template<typename T>
+template <typename T>
 [[nodiscard]] T Noise2D<T>::get_noise_at(std::size_t x, std::size_t y) const
 {
     if(x >= width || y >= height)
@@ -328,7 +335,7 @@ template<typename T>
     return data[y][x];
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_blue_noise(double sigma)
 {
     generate_blue_noise_initial_binary_pattern(sigma);
@@ -339,7 +346,7 @@ void Noise2D<T>::generate_blue_noise(double sigma)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_brown_noise(double leaky_integrator, std::size_t kernel_size, double sigma)
 {
     std::vector<std::vector<double>> data_white_noise = std::vector<std::vector<double>>(height, std::vector<double>(width, 0.0));
@@ -392,7 +399,7 @@ void Noise2D<T>::generate_brown_noise(double leaky_integrator, std::size_t kerne
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_white_noise()
 {
     std::random_device rd;
@@ -418,12 +425,12 @@ void Noise2D<T>::generate_white_noise()
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_perlin_noise(std::size_t seed, double frequency)
 {
-    if(frequency <= 0 || frequency >= 1)
+    if(frequency <= 0.0)
     {
-        throw std::out_of_range("generate_perlin_noise invalid frequency, must be in range (0, 1)");
+        throw std::out_of_range("generate_perlin_noise invalid frequency, must be greater than 0.0");
     }
 
     for(std::size_t y = 0; y < height; y++)
@@ -433,51 +440,18 @@ void Noise2D<T>::generate_perlin_noise(std::size_t seed, double frequency)
             // convert each pixel coordinate to a floating point sample coordinate scaled to the desired frequency
             const double yf = static_cast<double>(y) * frequency;
             const double xf = static_cast<double>(x) * frequency;
-            
-            // find the four surrounding grid intersection coordinates
-            const double x0 = static_cast<double>(static_cast<int>(xf));
-            const double y0 = static_cast<double>(static_cast<int>(yf));
-            const double x1 = x0 + 1.0;
-            const double y1 = y0 + 1.0;
 
-            // determine the x and y offset of the sample coordinate from the top left corner
-            const double dx = xf - x0;
-            const double dy = yf - y0;
-
-            // generate a random gradient vector at each surrounding grid intersection
-            const std::pair<double, double> graident_vector_00 = noise2d::random_gradient_vector(seed, x0, y0);
-            const std::pair<double, double> graident_vector_01 = noise2d::random_gradient_vector(seed, x0, y1);
-            const std::pair<double, double> graident_vector_10 = noise2d::random_gradient_vector(seed, x1, y0);
-            const std::pair<double, double> graident_vector_11 = noise2d::random_gradient_vector(seed, x1, y1);
-
-            // calculate the distance vector from the sampling coordinate to the surrounding grid intersection coordinates
-            const std::pair<double, double> distance_vector_00 = noise2d::distance_vector(x0, y0, xf, yf);
-            const std::pair<double, double> distance_vector_01 = noise2d::distance_vector(x0, y1, xf, yf);
-            const std::pair<double, double> distance_vector_10 = noise2d::distance_vector(x1, y0, xf, yf);
-            const std::pair<double, double> distance_vector_11 = noise2d::distance_vector(x1, y1, xf, yf);
-
-            // calculate the dot product between the sample coordinate and each surrounding grid intersection coordinate
-            const double dot_product_00 = noise2d::dot_product(graident_vector_00, distance_vector_00);
-            const double dot_product_01 = noise2d::dot_product(graident_vector_01, distance_vector_01);
-            const double dot_product_10 = noise2d::dot_product(graident_vector_10, distance_vector_10);
-            const double dot_product_11 = noise2d::dot_product(graident_vector_11, distance_vector_11);
-
-            // interpolate between the horizontal components
-            const double interpolation_top = noise2d::interpolate_quintic(dot_product_00, dot_product_10, dx);
-            const double interpolation_bottom = noise2d::interpolate_quintic(dot_product_01, dot_product_11, dx);
-
-            // interpolate between the interpolated components
-            const double interpolation_total = noise2d::interpolate_quintic(interpolation_top, interpolation_bottom, dy);
+            const double noise = sample_perlin_point(seed, xf, yf);
 
             if constexpr(std::is_integral<T>::value)
             {
                 // normalize to [0, output_levels) range
-                data[y][x] = static_cast<T>((interpolation_total + 1.0) * static_cast<double>(output_levels) / 2.0);
+                data[y][x] = static_cast<T>((noise + 1.0) * static_cast<double>(output_levels) / 2.0);
             }
             else
             {
                 // normalize to [0, 1] range
-                data[y][x] = static_cast<T>((interpolation_total + 1.0) / 2.0);
+                data[y][x] = static_cast<T>((noise + 1.0) / 2.0);
             }
         }
     }
@@ -485,7 +459,57 @@ void Noise2D<T>::generate_perlin_noise(std::size_t seed, double frequency)
     return;
 }
 
-template<typename T>
+template <typename T>
+void Noise2D<T>::generate_fractal_noise(double starting_frequency, std::size_t octaves)
+{
+    if(starting_frequency <= 0.0)
+    {
+        throw std::out_of_range("generate_fractal_noise invalid starting frequency, must be greater than 0.0");
+    }
+    if(octaves < 1)
+    {
+        throw std::out_of_range("generate_fractal_noise invalid number of octaves, must be greater than or equal to 1");
+    }
+
+    std::random_device rd;
+    std::size_t seed = rd();
+
+    for(std::size_t y = 0; y < height; y++)
+    {
+        for(std::size_t x = 0; x < width; x++)
+        {
+            double noise = 0.0;
+            double frequency = starting_frequency;
+            double amplitude = 1.0;
+
+            for(std::size_t octave = 0; octave < octaves; octave++)
+            {
+                const double yf = static_cast<double>(y) * frequency;
+                const double xf = static_cast<double>(x) * frequency;
+
+                noise += amplitude * sample_perlin_point(seed, xf, yf);
+
+                frequency *= 2.0;
+                amplitude /= 2.0;
+            }
+
+            if constexpr(std::is_integral<T>::value)
+            {
+                // normalize to [0, output_levels) range
+                data[y][x] = static_cast<T>((noise + 1.0) * static_cast<double>(output_levels) / 2.0);
+            }
+            else
+            {
+                // normalize to [0, 1] range
+                data[y][x] = static_cast<T>((noise + 1.0) / 2.0);
+            }
+        }
+    }
+
+    return;
+}
+
+template <typename T>
 void Noise2D<T>::generate_blue_noise_initial_binary_pattern(double sigma)
 {
     const std::size_t num_pixels = height * width;
@@ -554,7 +578,7 @@ void Noise2D<T>::generate_blue_noise_initial_binary_pattern(double sigma)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_blue_noise_rank_data_phase_1(double sigma)
 {
     int rank = std::max(1, static_cast<int>(static_cast<double>(width * height) * COVERAGE)) - 1; // must have at least 1 minority pixel (one)
@@ -574,7 +598,7 @@ void Noise2D<T>::generate_blue_noise_rank_data_phase_1(double sigma)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_blue_noise_rank_data_phase_2(double sigma)
 {
     const int num_pixels_half = width * height / 2;
@@ -595,7 +619,7 @@ void Noise2D<T>::generate_blue_noise_rank_data_phase_2(double sigma)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::generate_blue_noise_rank_data_phase_3(double sigma)
 {
     const int num_pixels = width * height;
@@ -616,7 +640,7 @@ void Noise2D<T>::generate_blue_noise_rank_data_phase_3(double sigma)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::normalize_blue_noise_rank_data()
 {
     for(std::size_t y = 0; y < height; y++)
@@ -638,7 +662,7 @@ void Noise2D<T>::normalize_blue_noise_rank_data()
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::binary_pattern_copy(std::vector<std::vector<int>>& binary_pattern_source, std::vector<std::vector<int>>& binary_pattern_destination)
 {
     for(std::size_t y = 0; y < height; y++)
@@ -652,7 +676,7 @@ void Noise2D<T>::binary_pattern_copy(std::vector<std::vector<int>>& binary_patte
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>>& binary_pattern)
 {
     for(std::size_t y = 0; y < height; y++)
@@ -666,7 +690,48 @@ void Noise2D<T>::binary_pattern_invert(std::vector<std::vector<int>>& binary_pat
     return;
 }
 
-template<typename T>
+template <typename T>
+double Noise2D<T>::sample_perlin_point(std::size_t seed, double x, double y)
+{
+    // find the four surrounding grid intersection coordinates
+    const double x0 = static_cast<double>(static_cast<int>(x));
+    const double y0 = static_cast<double>(static_cast<int>(y));
+    const double x1 = x0 + 1.0;
+    const double y1 = y0 + 1.0;
+
+    // determine the x and y offset of the sample coordinate from the top left corner
+    const double dx = x - x0;
+    const double dy = y - y0;
+
+    // generate a random gradient vector at each surrounding grid intersection
+    const std::pair<double, double> graident_vector_00 = noise2d::random_gradient_vector(seed, x0, y0);
+    const std::pair<double, double> graident_vector_01 = noise2d::random_gradient_vector(seed, x0, y1);
+    const std::pair<double, double> graident_vector_10 = noise2d::random_gradient_vector(seed, x1, y0);
+    const std::pair<double, double> graident_vector_11 = noise2d::random_gradient_vector(seed, x1, y1);
+
+    // calculate the distance vector from the sampling coordinate to the surrounding grid intersection coordinates
+    const std::pair<double, double> distance_vector_00 = noise2d::distance_vector(x0, y0, x, y);
+    const std::pair<double, double> distance_vector_01 = noise2d::distance_vector(x0, y1, x, y);
+    const std::pair<double, double> distance_vector_10 = noise2d::distance_vector(x1, y0, x, y);
+    const std::pair<double, double> distance_vector_11 = noise2d::distance_vector(x1, y1, x, y);
+
+    // calculate the dot product between the sample coordinate and each surrounding grid intersection coordinate
+    const double dot_product_00 = noise2d::dot_product(graident_vector_00, distance_vector_00);
+    const double dot_product_01 = noise2d::dot_product(graident_vector_01, distance_vector_01);
+    const double dot_product_10 = noise2d::dot_product(graident_vector_10, distance_vector_10);
+    const double dot_product_11 = noise2d::dot_product(graident_vector_11, distance_vector_11);
+
+    // interpolate between the horizontal components
+    const double interpolation_top = noise2d::interpolate_quintic(dot_product_00, dot_product_10, dx);
+    const double interpolation_bottom = noise2d::interpolate_quintic(dot_product_01, dot_product_11, dx);
+
+    // interpolate between the interpolated components
+    const double interpolation_total = noise2d::interpolate_quintic(interpolation_top, interpolation_bottom, dy);
+
+    return interpolation_total;
+}
+
+template <typename T>
 Noise2D<T>::EnergyLUT::EnergyLUT(std::size_t width, std::size_t height)
 {
     this->height = height;
@@ -679,7 +744,7 @@ Noise2D<T>::EnergyLUT::EnergyLUT(std::size_t width, std::size_t height)
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::EnergyLUT::create(const std::vector<std::vector<int>>& binary_pattern, double sigma)
 {
     const double half_width = static_cast<double>(width) / 2.0;
@@ -744,7 +809,7 @@ void Noise2D<T>::EnergyLUT::create(const std::vector<std::vector<int>>& binary_p
     return;
 }
 
-template<typename T>
+template <typename T>
 void Noise2D<T>::EnergyLUT::update(const std::vector<std::vector<int>>& binary_pattern, std::size_t x, std::size_t y, double sigma)
 {
     const double half_width = static_cast<double>(width) / 2.0;

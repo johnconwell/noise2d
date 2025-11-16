@@ -49,8 +49,8 @@ class Image
 {
 public:
     Image();
-    size_t save(const char* file_name);
-    void create_from_matrix(std::vector<std::vector<int>> matrix);
+    std::size_t save(const char* file_name);
+    void create_from_matrix(const std::vector<std::vector<int>>& matrix);
 
 private:
     std::vector<unsigned char> pixels;
