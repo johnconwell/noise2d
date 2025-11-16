@@ -43,6 +43,10 @@ white_noise: ./examples/example_white_noise.cpp ./src/fourier.cpp ./src/image.cp
 perlin_noise: ./examples/example_perlin_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
 	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
+# rule to make example_fractal_noise.cpp and build the result as fractak_noise.exe
+fractal_noise: ./examples/example_fractal_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
+	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+
 .PHONY : clean
 
 clean:
