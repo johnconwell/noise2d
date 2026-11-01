@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libfftw3-dev
+      - name: Test with sanitizers
+        run: make test CC=${{ matrix.compiler }}
+      - name: Build examples
+        run: make -j4 all CC=${{ matrix.compiler }}
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-fftw
+      - name: Test
+        run: make test
+      - name: Build examples
+        run: make -j4 all
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install fftw
+      - name: Test with sanitizers
+        run: make test CC=clang++
+      - name: Build examples
+        run: make -j4 all CC=clang++ CPPFLAGS=-I$(brew --prefix)/include LDFLAGS=-L$(brew --prefix)/lib
+
+  cmake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libfftw3-dev
+      - run: cmake -S . -B build
+      - run: cmake --build build -j4
+      - run: ctest --test-dir build --output-on-failure

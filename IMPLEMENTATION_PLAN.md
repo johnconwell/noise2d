@@ -119,7 +119,7 @@ T quantize(double v01) const; // v01 in [0,1] → T, clamped
 and route every generator's final write through it. This removes five copies of the `if constexpr(std::is_integral<T>::value)` block.
 
 - **Brown noise (S3):** stop using `output_levels` for floating-point `T` (currently gives `[0, 255]`).
-- **Blue noise (S16):** decide whether float output is `rank / N` (range `[0, (N−1)/N]`) or `rank / (N − 1)` (range `[0, 1]`). **Recommendation:** `rank / (N − 1)` for consistency with the contract; guard `N == 1`. Update the code comment either way.
+- **Blue noise (S16):** float output is `rank / (N − 1)` (range `[0, 1]`) for consistency with the contract; guard `N == 1`.
 - **Perlin (S2):** scale the raw value by `1 / 0.70710678` (the true 2D Perlin bound with unit gradients) before mapping `[-1, 1] → [0, 1]`, then clamp.
 
 **Tests:** for each generator and for `T` = `unsigned char`, `int`, `float` and `double`, check `min >= 0` and `max <= upper bound`; for float `T`, check `max <= 1.0`.
@@ -142,7 +142,7 @@ and route every generator's final write through it. This removes five copies of 
 
 ## Phase 3 — Brown noise and spec alignment
 
-### 3.1 Decide what brown noise is (B5, S4) — **decision needed**
+### 3.1 Decide what brown noise is (B5, S4) — **decided: Option A′ with a 1/f² power spectrum, see Decisions**
 The README's intro says "integrate white noise"; the code does a Gaussian blur, and `leaky_integrator` has no effect.
 
 | Option | Description | Pros | Cons |
@@ -187,7 +187,7 @@ These changes break source compatibility, so land them together in one release w
 ### 4.2 Seeding (A5, S12)
 - Add a `std::mt19937_64 rng` member, seeded from an optional constructor argument; default-seeded from `std::random_device` only when no seed is given.
 - Add `void seed(std::uint64_t)` to reseed between calls.
-- Every generator draws from `rng`. Perlin keeps its `seed` parameter for compatibility *or* drops it in favour of the member seed — **recommendation:** drop it so all generators behave the same way, and mention it in the migration notes.
+- Every generator draws from `rng`. Perlin drops its `seed` parameter in favour of the member seed, and every generator takes an optional trailing `seed` (see Decisions). Mention it in the migration notes.
 - Fractal noise gets reproducibility automatically.
 - Fix the `std::mt19337` comment typo while here (B10).
 - **Tests:** same seed → identical output for every generator; different seeds → different output.
@@ -267,12 +267,12 @@ Record baseline timings before starting (review §5 table) using a small `bench/
 - Fix the `fractak_noise.exe` comment typo.
 - Make `clean` portable: detect `OS=Windows_NT` and use `del` there, or document that a POSIX shell (MSYS2/Git Bash) is required.
 
-### 6.2 CMake (optional but recommended)
+### 6.2 CMake (alongside the Makefile)
 - Add `CMakeLists.txt`:
   - `noise2d` as an `INTERFACE` library (header-only) with `target_compile_features(cxx_std_17)`.
   - Examples behind `option(NOISE2D_BUILD_EXAMPLES ON)`, using `find_package(FFTW3)` or `pkg_check_modules(FFTW3 fftw3)`, so they build on Linux/macOS.
   - Tests behind `option(NOISE2D_BUILD_TESTS ON)` and registered with `ctest`.
-- Keep the Makefile for existing Windows users, or remove it once CMake works there.
+- Keep the Makefile for existing Windows users.
 
 ### 6.3 Examples
 - Replace the five near-identical files with one `examples/example.cpp` taking the noise type and sizes as command-line arguments (`example blue 16 32 64 256`), or keep five thin `main`s that call a shared `examples/common.h`. Removes ~500 duplicated lines.
@@ -283,7 +283,7 @@ Record baseline timings before starting (review §5 table) using a small `bench/
 - Regenerate all `docs/*.png` and update the README sentence about "various sizes".
 
 ### 6.4 Repo hygiene
-- Keep one copy of `libfftw3-3.dll` (in `bin/`, next to the executables that load it) and delete `lib/libfftw3-3.dll`; link against it with `-L$(BDIR)` or an import library. Alternatively, stop committing the DLL and document how to get it (MSYS2 `pacman -S mingw-w64-x86_64-fftw`).
+- Stop committing `libfftw3-3.dll` (both copies) and document how to get FFTW (MSYS2 `pacman -S mingw-w64-ucrt-x86_64-fftw`, or the system package manager on Linux/macOS).
 - Add a README "Licensing" note: the library is MIT; the examples link FFTW, which is GPL-licensed, so distributed example binaries fall under the GPL.
 - Add `output/`, `obj/*.o`, `bin/tests*`, `build/` to `.gitignore` as appropriate.
 
@@ -362,10 +362,34 @@ Every review item and where it is addressed.
 
 ---
 
-## Open decisions
+## Decisions
 
-1. **Brown noise (Phase 3.1):** Option A (leaky integration, recommended), A′ (spectral), or B (rename to blurred noise)?
-2. **Perlin `seed` parameter (Phase 4.2):** drop it in favour of the object-level seed (recommended), or keep both?
-3. **Blue noise float range (Phase 2.1):** `rank / (N − 1)` (recommended, full `[0, 1]`) or keep `rank / N`?
-4. **Build system (Phase 6.2):** add CMake alongside the Makefile, or replace the Makefile?
-5. **FFTW DLL (Phase 6.4):** keep one committed copy, or stop committing it and document installation?
+1. **Brown noise (Phase 3.1):** Option A′, spectral synthesis with a 1/f² **power** spectrum (amplitude scaled by 1/f). `leaky_integrator`, `kernel_size` and `sigma` are removed, along with `gaussian_kernel` and `convolve`. The library ships its own small FFT so it stays standard-library only.
+2. **Perlin `seed` parameter (Phase 4.2):** dropped in favour of the object-level seed. Every `generate_*` method also takes an optional trailing `seed` that reseeds the object before generating, for reproducibility.
+3. **Blue noise float range (Phase 2.1):** `rank / (N − 1)`, the full `[0, 1]`.
+4. **Build system (Phase 6.2):** add CMake alongside the Makefile.
+5. **FFTW DLL (Phase 6.4):** stop committing it and document installation.
+
+## Implementation notes
+
+Places where the implementation departs from the text above, and why:
+
+- **Perlin sampling (2.2):** a half-pixel offset alone leaves even whole-number frequencies flat, since `(x + 0.5) * 2` is a whole number. Samples also get a random per-call (per-octave for fractal) lattice offset whose fractional part is in `[0.25, 0.75)`.
+- **Perlin gradients (5.1):** uses the hash alternative, so the lattice does not repeat at 256 cells.
+- **Blue noise kernel (5.2):** truncating at 3σ on its own made sparse cells tie on energy and break ties by scan order, which worsened the lowest and highest ranks and added a top-to-bottom bias at low sigma. The full Gaussian is used while the pattern is sparse, which brought those ranks level with the exact kernel at no measurable cost.
+- **Blue noise initial pattern:** the swap loop's limit is now the number of cells rather than 100, which would stop too early at large sizes.
+- **`gaussian_kernel` / `convolve` (1.5, 1.7):** deleted by Decision 1, so the fixes and tests for them are not needed. No `generate_blurred_noise` was added.
+- **Validation added beyond the plan:** `sigma` must be positive and finite, and frequencies too large to sample accurately throw.
+- **Compile-time migration guard:** old calls such as `generate_brown_noise(0.999)` and `generate_perlin_noise(1, 0.1)` would otherwise compile with a different meaning, because a `double` converts to the optional seed. Deleted overloads reject them.
+- **Vendored `include/fftw3.h`:** removed with the DLLs, since installing FFTW provides a matching header.
+
+Benchmark (`g++ -O2`, this repo's Windows machine, 64×64 unless noted):
+
+| Generator | Before | After |
+|---|---|---|
+| Perlin | 117 ms | 0.07 ms |
+| Fractal (8 octaves) | 936 ms | 0.33 ms |
+| Blue | 146 ms | 7.5 ms |
+| Brown | 0.17 ms (a blur, not brown noise) | 0.45 ms |
+| Blue, 256×256 | not measured | 4.4 s |
+| Fractal (8 octaves), 256×256 | not measured | 5.2 ms |
