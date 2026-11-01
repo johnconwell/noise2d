@@ -1,53 +1,69 @@
 BDIR = ./bin
 EDIR = ./examples
 IDIR = ./include
-LDIR = ./lib
 ODIR = ./obj
 SDIR = ./src
+TDIR = ./tests
 OUTDIR = ./output
 
 CC = g++
-CFLAGS = -I$(IDIR) -L$(LDIR) -Wall -std=c++17
+CFLAGS = -I$(IDIR) -Wall -std=c++17 -O2
 
-LIBS = -llibfftw3-3
+# set CPPFLAGS and LDFLAGS to point at FFTW if it is not installed in a default location
+CPPFLAGS =
+LDFLAGS =
+LIBS = -lfftw3
+
+# sanitizers are unavailable with MinGW; SANITIZE can be overridden on the command line
+ifneq (,$(findstring mingw,$(shell $(CC) -dumpmachine)))
+EXE = .exe
+SANITIZE =
+else
+EXE =
+SANITIZE = -fsanitize=address,undefined
+endif
 
 # list of headers (dependencies) and rule to format them as [INCLUDE_DIR]/[HEADER]
-_DEPS = fftw3.h fourier.h image.h lodepng.h
-DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
+_DEPS = fourier.h image.h lodepng.h noise2d.h
+DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS)) $(EDIR)/common.h
 
-# list of objects and rule to format them as [OBJECT_DIR]/[OBJECT]
-_OBJ = example_blue_noise.o example_brown_noise.o example_white_noise.o fourier.o image.o lodepng.o
+# list of objects shared by the examples and rule to format them as [OBJECT_DIR]/[OBJECT]
+_OBJ = fourier.o image.o lodepng.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
-# rule to make each object with corresponding named cpp file and headers as dependencies
-$(ODIR)/%.o : $(EDIR)/%.cpp $(SDIR)/%.cpp $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
+EXAMPLES = blue_noise brown_noise white_noise perlin_noise fractal_noise
 
-# rule to make all objects and build the result as main.exe
-main : $(OBJ)
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule to build every example
+all : $(EXAMPLES)
 
-# rule to make example_blue_noise.cpp and build the result as blue_noise.exe
-blue_noise: ./examples/example_blue_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule for each example name to build the corresponding executable
+$(EXAMPLES) : % : $(BDIR)/%$(EXE)
 
-# rule to make example_brown_noise.cpp and build the result as brown_noise.exe
-brown_noise: ./examples/example_brown_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule to make each shared object with corresponding named cpp file and headers as dependencies
+$(ODIR)/%.o : $(SDIR)/%.cpp $(DEPS)
+	$(CC) -c -o $@ $< $(CFLAGS) $(CPPFLAGS)
 
-# rule to make example_white_noise.cpp and build the result as white_noise.exe
-white_noise: ./examples/example_white_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule to make each example object with corresponding named cpp file and headers as dependencies
+$(ODIR)/example_%.o : $(EDIR)/example_%.cpp $(DEPS)
+	$(CC) -c -o $@ $< $(CFLAGS) $(CPPFLAGS)
 
-# rule to make example_perlin_noise.cpp and build the result as perlin_noise.exe
-perlin_noise: ./examples/example_perlin_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule to link each example object against the shared objects
+$(BDIR)/%$(EXE) : $(ODIR)/example_%.o $(OBJ)
+	$(CC) -o $@ $^ $(LDFLAGS) $(LIBS)
 
-# rule to make example_fractal_noise.cpp and build the result as fractak_noise.exe
-fractal_noise: ./examples/example_fractal_noise.cpp ./src/fourier.cpp ./src/image.cpp ./src/lodepng.cpp
-	$(CC) -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+# rule to build and run the tests
+test :
+	$(CC) -std=c++17 -Wall -Wextra -Werror -g $(SANITIZE) -I$(IDIR) $(TDIR)/*.cpp -o $(BDIR)/tests$(EXE)
+	$(BDIR)/tests$(EXE)
 
-.PHONY : clean
+# rule to build and run the benchmark
+bench :
+	$(CC) -std=c++17 -Wall -Wextra -O2 -I$(IDIR) ./bench/bench.cpp -o $(BDIR)/bench$(EXE)
+	$(BDIR)/bench$(EXE)
 
-clean:
-	rm -f $(ODIR)/*.o $(OUTDIR)/*.png $(BDIR)/*.exe
+.PHONY : all clean test bench $(EXAMPLES)
+.SECONDARY :
+
+# requires a POSIX shell (e.g. MSYS2 on Windows)
+clean :
+	rm -f $(ODIR)/*.o $(OUTDIR)/*.png $(BDIR)/*.exe $(patsubst %,$(BDIR)/%,$(EXAMPLES)) $(BDIR)/tests $(BDIR)/bench

@@ -21,6 +21,9 @@
 // SOFTWARE.
 
 #include "fourier.h"
+#include <algorithm> // std::max, std::min
+#include <climits> // INT_MAX, INT_MIN
+#include <cmath> // std::log1p, std::sqrt
 
 Fourier2D::Fourier2D()
 {
@@ -28,6 +31,7 @@ Fourier2D::Fourier2D()
     height = 0;
     width = 0;
     transform = std::vector<std::vector<int>>(0, std::vector<int>(0, 0));
+    transform_log_magnitude = std::vector<std::vector<double>>(0, std::vector<double>(0, 0.0));
     remove_dc_offset = false;
     center_output = false;
     return;
@@ -39,6 +43,7 @@ Fourier2D::Fourier2D(std::vector<std::vector<int>> dataset, bool remove_dc_offse
     this->height = dataset.size();
     this->width = dataset[0].size();
     this->transform = std::vector<std::vector<int>>(height, std::vector<int>(width, 0));
+    this->transform_log_magnitude = std::vector<std::vector<double>>(height, std::vector<double>(width, 0.0));
     this->remove_dc_offset = remove_dc_offset;
     this->center_output = center_output;
     return;
@@ -70,31 +75,31 @@ void Fourier2D::dft()
     {
         for(std::size_t x = 0; x < width; x++)
         {
-            in[y * height + x][0] = static_cast<double>(dataset[y][x]);
-            in[y * height + x][1] = 0.0;
+            in[y * width + x][0] = static_cast<double>(dataset[y][x]);
+            in[y * width + x][1] = 0.0;
         }
     }
 
     // remove DC offset by subtracting the mean of the data
     if(remove_dc_offset)
     {
-        int mean = 0;
+        double mean = 0.0;
 
         for(std::size_t y = 0; y < height; y++)
         {
             for(std::size_t x = 0; x < width; x++)
             {
-                mean += in[y * height + x][0];
+                mean += in[y * width + x][0];
             }
         }
 
-        mean /= size;
+        mean /= static_cast<double>(size);
 
         for(std::size_t y = 0; y < height; y++)
         {
             for(std::size_t x = 0; x < width; x++)
             {
-                in[y * height + x][0] -= mean;
+                in[y * width + x][0] -= mean;
             }
         }
     }
@@ -106,7 +111,7 @@ void Fourier2D::dft()
         {
             for(std::size_t x = 0; x < width; x++)
             {
-                in[y * height + x][0] *= pow(-1, y + x);
+                in[y * width + x][0] *= ((x + y) & 1) ? -1.0 : 1.0;
             }
         }
     }
@@ -118,80 +123,9 @@ void Fourier2D::dft()
     {
         for(std::size_t x = 0; x < width; x++)
         {
-            transform[y][x] = static_cast<int>(magnitude(out[y * height + x]));
-        }
-    }
-
-    fftw_destroy_plan(plan);
-    fftw_free(in);
-    fftw_free(out);
-
-    return;
-}
-
-// computes the inverse dft of the transform and stores the result in dataset
-void Fourier2D::idft()
-{
-    const std::size_t size = width * height;
-
-    fftw_complex *in = fftw_alloc_complex(size);
-    fftw_complex *out = fftw_alloc_complex(size);
-    fftw_plan plan = fftw_plan_dft_2d(height, width, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-
-    // fill the in array with data from dataset
-    for(std::size_t y = 0; y < height; y++)
-    {
-        for(std::size_t x = 0; x < width; x++)
-        {
-            in[y * height + x][0] = static_cast<double>(transform[y][x]);
-            in[y * height + x][1] = 0.0;
-        }
-    }
-
-    // remove DC offset by subtracting the mean of the data
-    if(remove_dc_offset)
-    {
-        int mean = 0;
-
-        for(std::size_t y = 0; y < height; y++)
-        {
-            for(std::size_t x = 0; x < width; x++)
-            {
-                mean += in[y * height + x][0];
-            }
-        }
-
-        mean /= size;
-
-        for(std::size_t y = 0; y < height; y++)
-        {
-            for(std::size_t x = 0; x < width; x++)
-            {
-                in[y * height + x][0] -= mean;
-            }
-        }
-    }
-
-    // center output
-    if(center_output)
-    {
-        for(std::size_t y = 0; y < height; y++)
-        {
-            for(std::size_t x = 0; x < width; x++)
-            {
-                in[y * height + x][0] *= pow(-1, y + x);
-            }
-        }
-    }
-
-    fftw_execute(plan);
-
-    // fill output vector with the results of the transform
-    for(std::size_t y = 0; y < height; y++)
-    {
-        for(std::size_t x = 0; x < width; x++)
-        {
-            dataset[y][x] = static_cast<int>(magnitude(out[y * height + x]));
+            // a log scale keeps the low-magnitude structure of the spectrum visible
+            transform_log_magnitude[y][x] = std::log1p(magnitude(out[y * width + x]));
+            transform[y][x] = static_cast<int>(transform_log_magnitude[y][x]);
         }
     }
 
@@ -209,10 +143,31 @@ void Fourier2D::normalize_dataset(std::size_t output_levels)
     return;
 }
 
-// normalize the transform (maps values to [0, output_levels - 1])
+// normalize the transform (maps log magnitudes to [0, output_levels - 1])
 void Fourier2D::normalize_transform(std::size_t output_levels)
 {
-    normalize(transform, output_levels);
+    double array_min = transform_log_magnitude[0][0];
+    double array_max = transform_log_magnitude[0][0];
+
+    for(std::size_t y = 0; y < height; y++)
+    {
+        for(std::size_t x = 0; x < width; x++)
+        {
+            array_min = std::min(array_min, transform_log_magnitude[y][x]);
+            array_max = std::max(array_max, transform_log_magnitude[y][x]);
+        }
+    }
+
+    const double array_range = array_max > array_min ? array_max - array_min : 1.0; // prevent divide by 0 errors if all values are the same
+
+    for(std::size_t y = 0; y < height; y++)
+    {
+        for(std::size_t x = 0; x < width; x++)
+        {
+            transform[y][x] = static_cast<int>((transform_log_magnitude[y][x] - array_min) * static_cast<double>(output_levels - 1) / array_range);
+        }
+    }
+
     return;
 }
 
@@ -248,7 +203,7 @@ std::string Fourier2D::to_string()
 // returns the magnitude of a complex value
 double Fourier2D::magnitude(fftw_complex& value)
 {
-    return sqrt(value[0] * value[0] + value[1] * value[1]);
+    return std::sqrt(value[0] * value[0] + value[1] * value[1]);
 }
 
 // normalizes the array (maps values to [0, output_levels - 1])

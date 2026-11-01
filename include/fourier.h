@@ -20,10 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __FOURIER_H
-#define __FOURIER_H
+#ifndef NOISE2D_FOURIER_H
+#define NOISE2D_FOURIER_H
 
-#include <cmath> // min(), max()
 #include <cstddef> // size_t
 #include <fftw3.h> // fft types + functions
 #include <string> // std::string
@@ -37,7 +36,6 @@ public:
     std::vector<std::vector<int>> get_dataset();
     std::vector<std::vector<int>> get_transform();
     void dft();
-    void idft();
     void normalize_dataset(std::size_t output_levels);
     void normalize_transform(std::size_t output_levels);
 
@@ -51,6 +49,7 @@ private:
     std::size_t height;
     std::size_t width;
     std::vector<std::vector<int>> transform;
+    std::vector<std::vector<double>> transform_log_magnitude;
     bool remove_dc_offset;
     bool center_output;
 };

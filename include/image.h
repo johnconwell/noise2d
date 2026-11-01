@@ -20,10 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef __IMAGE_H
-#define __IMAGE_H
+#ifndef NOISE2D_IMAGE_H
+#define NOISE2D_IMAGE_H
 
 #include "lodepng.h" // png encode/decode functions
+#include <cstddef> // std::size_t
 #include <cstdint> // int16_t
 #include <vector> // std::vector
 
